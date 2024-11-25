@@ -1,6 +1,6 @@
 import os
 from tkinter import filedialog, messagebox, simpledialog
-from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, CompositeVideoClip
+from moviepy.editor import VideoFileClip, concatenate_videoclips, vfx, CompositeVideoClip, AudioFileClip, concatenate_audioclips
 import threading
 
 class VideoOperations:
@@ -102,8 +102,16 @@ class VideoOperations:
 
             # Set audio with volume adjustment if an audio track is added
             if self.controller.audio_file:
+                # Extend audio if it is shorter than the video
+                if self.controller.audio_file.duration < final_clip.duration:
+                    num_loops = int(final_clip.duration // self.controller.audio_file.duration) + 1
+                    extended_audio = concatenate_audioclips([self.controller.audio_file] * num_loops)  # Repeat the audio to match the video length
+                    extended_audio = extended_audio.subclip(0, final_clip.duration)
+                else:
+                    extended_audio = self.controller.audio_file.subclip(0, final_clip.duration)
+                
                 volume = self.controller.gui.volume_control.get() / 100.0
-                adjusted_audio = self.controller.audio_file.volumex(volume)
+                adjusted_audio = extended_audio.volumex(volume)
                 final_clip = final_clip.set_audio(adjusted_audio)
 
             # Add text overlays
@@ -115,6 +123,8 @@ class VideoOperations:
             messagebox.showinfo("Export Complete", "Your AMV has been exported successfully!")
         except Exception as e:
             messagebox.showerror("Export Failed", f"An error occurred: {str(e)}")
+
+
 
 
 
