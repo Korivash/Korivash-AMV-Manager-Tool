@@ -11,7 +11,7 @@ class VideoOperations:
         file_path = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4;*.avi;*.mov")])
         if file_path:
             try:
-                clip = VideoFileClip(file_path).resize(height=720)  # Ensure consistent resolution
+                clip = VideoFileClip(file_path)
                 self.controller.clip_files.append(file_path)
                 self.controller.clip_list.append(clip)
                 self.controller.gui.clips_text.insert("end", f"Added: {os.path.basename(file_path)}\n")
@@ -27,7 +27,7 @@ class VideoOperations:
             end_time = self.controller.utils.convert_time_to_seconds(end_time_str)
             if start_time is not None and end_time is not None:
                 try:
-                    clip = VideoFileClip(file_path).subclip(start_time, end_time).resize(height=720)
+                    clip = VideoFileClip(file_path).subclip(start_time, end_time)
                     self.controller.clip_files.append(file_path)
                     self.controller.clip_list.append(clip)
                     self.controller.gui.clips_text.insert("end", f"Added (trimmed): {os.path.basename(file_path)} from {start_time_str} to {end_time_str}\n")
@@ -83,7 +83,7 @@ class VideoOperations:
         if not export_path:
             return
 
-        
+        # Run export in a separate thread to avoid freezing the GUI
         export_thread = threading.Thread(target=self._export_amv_thread, args=(export_path,))
         export_thread.start()
 
@@ -91,41 +91,32 @@ class VideoOperations:
         try:
             final_clips = []
             for clip in self.controller.clip_list:
-                
+                # Adjust the speed of each clip based on user input
                 speed = self.controller.gui.speed_control.get()
                 adjusted_clip = clip.fx(vfx.speedx, speed)
-                adjusted_clip = adjusted_clip.resize(height=720)  # Ensure consistent resolution
+                adjusted_clip = adjusted_clip.set_fps(30)  # Set a consistent frame rate to avoid playback issues
                 final_clips.append(adjusted_clip)
 
-            
-            total_clip_duration = sum([clip.duration for clip in final_clips])
+            # Concatenate all video clips
+            final_clip = concatenate_videoclips(final_clips, method="compose")
 
-            
-            if self.controller.gui.loop_var.get() and self.controller.audio_file:
-                while total_clip_duration < self.controller.audio_file.duration:
-                    final_clips.extend([clip.copy() for clip in self.controller.clip_list])
-                    total_clip_duration = sum([clip.duration for clip in final_clips])
-
-            
-            final_clip = concatenate_videoclips(final_clips, method="compose")  
-
-            
-            if self.controller.audio_file and final_clip.duration < self.controller.audio_file.duration:
-                self.controller.audio_file = self.controller.audio_file.subclip(0, final_clip.duration)
-
-            
+            # Set audio with volume adjustment if an audio track is added
             if self.controller.audio_file:
                 volume = self.controller.gui.volume_control.get() / 100.0
                 adjusted_audio = self.controller.audio_file.volumex(volume)
                 final_clip = final_clip.set_audio(adjusted_audio)
 
-            
+            # Add text overlays
             if self.controller.text_overlays:
                 final_clip = CompositeVideoClip([final_clip] + self.controller.text_overlays)
 
-            final_clip.write_videofile(export_path, codec="libx264", preset="ultrafast")
+            # Export the final video with both video and audio
+            final_clip.write_videofile(export_path, codec="libx264", preset="medium", fps=30, audio_codec="aac", threads=4)
             messagebox.showinfo("Export Complete", "Your AMV has been exported successfully!")
         except Exception as e:
             messagebox.showerror("Export Failed", f"An error occurred: {str(e)}")
+
+
+
 
 
